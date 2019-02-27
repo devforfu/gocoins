@@ -14,9 +14,5 @@ services:
   db:
     container_name: db
     build: ./db
-    environment:
-      POSTGRES_DB: dev
-      POSTGRES_USER: postgres-dev
-      POSTGRES_PASSWORD: secret
     ports:
       - 54321:5432
