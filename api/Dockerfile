@@ -1,6 +1,10 @@
 FROM golang:alpine
 
+RUN apk add --no-cache git mercurial \
+    && go get github.com/lib/pq \
+    && apk del git mercurial
+
+COPY ./src /go/src/app
 WORKDIR /go/src/app
-COPY main.go main.go
 
 ENTRYPOINT ["go", "run", "main.go"]
