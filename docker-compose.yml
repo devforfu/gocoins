@@ -9,6 +9,14 @@ services:
       - 8080:80
     depends_on:
       - db
+    environment:
+      - DB_USER=docker
+      - DB_PASSWORD=docker
+      - DB_NAME=docker
+      - DB_HOST=db
+      - DB_PORT=5432
+      - SSL_MODE=disable
+      - PORT=80
     restart: always
 
   db:

@@ -3,11 +3,11 @@ package main
 import (
     "./server"
     "context"
-    "database/sql"
     "fmt"
-    _ "github.com/lib/pq"
     "log"
     "net/http"
+    "os"
+    "strconv"
 )
 
 const (
@@ -19,28 +19,44 @@ const (
     sslmode = "disable"
 )
 
-func connString() string {
-    return fmt.Sprintf(
-        "host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-        host, port, user, password, dbname, sslmode)
-}
+//func connString() string {
+//    return fmt.Sprintf(
+//        "host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+//        host, port, user, password, dbname, sslmode)
+//}
 
 func main() {
-    conf := server.Config{Host:"", Port:80, DatabaseConn:connString()}
-    srv := server.Create(conf)
+    conf := server.Config{Host:"", Port:mustGetPort(), DatabaseConn:connString()}
+    srv := server.NewBillingAPI(conf)
     if err := srv.ListenAndServe(); err != http.ErrServerClosed {
         log.Fatalf("server error: %s", err)
     }
     _ = srv.Shutdown(context.TODO())
+
+    //srv := server.Create(conf)
+    //if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+    //    log.Fatalf("server error: %s", err)
+    //}
+    //_ = srv.Shutdown(context.TODO())
 }
 
-func connect() (*sql.DB, error) {
-    db, err := sql.Open("postgres", connString())
-    if err != nil {
-        return nil, fmt.Errorf("conn string error: %s", err)
+func connString() string {
+    var (
+        host = os.Getenv("DB_HOST")
+        port = os.Getenv("DB_PORT")
+        dbname = os.Getenv("DB_NAME")
+        user = os.Getenv("DB_USER")
+        password = os.Getenv("DB_PASSWORD")
+        sslmode = os.Getenv("SSL_MODE")
+    )
+    return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+        host, port, user, password, dbname, sslmode)
+}
+
+func mustGetPort() int {
+    if port, err := strconv.Atoi(os.Getenv("PORT")); err != nil {
+        panic(err)
+    } else {
+        return port
     }
-    if err := db.Ping(); err != nil {
-        return nil, fmt.Errorf("db ping error: %s", err)
-    }
-    return db, nil
 }

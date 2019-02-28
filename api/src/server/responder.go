@@ -14,9 +14,17 @@ type Responder struct {
     *json.Encoder
 }
 
-func (r Responder) SendError(message string) {
-    r.WriteHeader(http.StatusBadRequest)
-    err := r.Encode(Response{"error": message})
+func (r Responder) SendRequestError(message string) {
+    r.SendError(message, http.StatusBadRequest)
+}
+
+func (r Responder) SendServerError(message string) {
+    r.SendError(message, http.StatusInternalServerError)
+}
+
+func (r Responder) SendError(message string, status int) {
+    r.WriteHeader(status)
+    err := r.Encode(Response{"error": message, "status": status})
     if err != nil { log.Print(err) }
 }
 

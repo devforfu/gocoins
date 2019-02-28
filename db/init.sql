@@ -4,15 +4,18 @@
 
 \c docker;
 
+CREATE TYPE currency AS ENUM ('USD', 'EUR');
+
 CREATE TABLE account (
   user_id serial PRIMARY KEY,
   identifier VARCHAR(36) NOT NULL,
+  currency currency NOT NULL,
   created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO account (identifier) VALUES
-('first'),
-('second'),
-('third');
+INSERT INTO account (identifier, currency) VALUES
+('first', 'USD'),
+('second', 'USD'),
+('third', 'EUR');
 
 GRANT ALL PRIVILEGES on TABLE account TO docker;
