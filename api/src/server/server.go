@@ -5,6 +5,7 @@ import (
     "fmt"
     "log"
     "net/http"
+    "strconv"
 )
 
 type Response map[string]interface{}
@@ -29,6 +30,7 @@ func NewBillingAPI(conf Config) *BillingAPI {
     mux.Handle("/", http.HandlerFunc(notFound))
     mux.Handle("/status", http.HandlerFunc(api.status))
     mux.Handle("/accounts", http.HandlerFunc(api.accounts))
+    mux.Handle("/transfer", http.HandlerFunc(api.transfer))
     return &api
 }
 
@@ -41,29 +43,19 @@ func (api *BillingAPI) status(w http.ResponseWriter, req *http.Request) {
 func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
     resp := NewJSONResponse(w)
 
-    conn, err := connect(api.DatabaseConn)
+    cur, err := NewCursor(api.DatabaseConn)
     if err != nil {
         log.Print(err)
         resp.SendServerError("internal error")
         return
     }
+    defer cur.Close()
 
-    rows, err := conn.Query("SELECT * FROM account")
+    accounts, err := cur.GetAvailableAccounts()
     if err != nil {
         log.Print(err)
         resp.SendServerError("internal error")
         return
-    }
-
-    accounts := make([]Account, 0)
-    for rows.Next() {
-        var account Account
-        err := rows.Scan(&account.ID, &account.Identifier, &account.Currency, &account.Created)
-        if err != nil {
-            log.Printf("fetch error: %s", err)
-            continue
-        }
-        accounts = append(accounts, account)
     }
 
     resp.SendSuccess(Response{"accounts": accounts})
@@ -79,7 +71,36 @@ func (api *BillingAPI) transfer(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    err := CheckParameters()
+    err = CheckParameters(data, "from", "to", "amount")
+    if err != nil {
+        resp.SendRequestError(fmt.Sprintf("invalid request: %s", err))
+        return
+    }
+
+    cur, err := NewCursor(api.DatabaseConn)
+    if err != nil {
+        log.Print(err)
+        resp.SendServerError("internal error")
+        return
+    }
+    defer cur.Close()
+
+    fromId, toId := data["from"], data["to"]
+    amount, err := strconv.Atoi(data["amount"])
+    if err != nil {
+        log.Print(err)
+        resp.SendRequestError(fmt.Sprintf("invalid transfer amount: %s", data["amount"]))
+        return
+    }
+
+    currency, err := cur.Transfer(fromId, toId, cents(amount))
+    if err != nil {
+        log.Print(err)
+        resp.SendRequestError(err.Error())
+        return
+    }
+
+    resp.SendSuccess(Response{"from": fromId, "to": toId, "currency": currency, "amount": cents(amount).String()})
 }
 
 func notFound(w http.ResponseWriter, req *http.Request) {

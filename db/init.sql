@@ -10,6 +10,7 @@ CREATE TABLE account (
   user_id serial PRIMARY KEY,
   identifier VARCHAR(36) NOT NULL,
   currency currency NOT NULL,
+  amount DECIMAL DEFAULT,
   created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
