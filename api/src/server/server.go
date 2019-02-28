@@ -1,10 +1,10 @@
 package server
 
 import (
+    "encoding/json"
     "fmt"
     "log"
     "net/http"
-    "time"
 )
 
 type Response map[string]interface{}
@@ -39,25 +39,22 @@ func (api *BillingAPI) status(w http.ResponseWriter, req *http.Request) {
 }
 
 func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
-    conn, err := connect(api.DatabaseConn)
     resp := NewJSONResponse(w)
+
+    conn, err := connect(api.DatabaseConn)
     if err != nil {
         log.Print(err)
         resp.SendServerError("internal error")
         return
     }
+
     rows, err := conn.Query("SELECT * FROM account")
     if err != nil {
         log.Print(err)
         resp.SendServerError("internal error")
         return
     }
-    type Account struct {
-        ID int
-        Identifier string
-        Currency string
-        Created time.Time
-    }
+
     accounts := make([]Account, 0)
     for rows.Next() {
         var account Account
@@ -68,7 +65,21 @@ func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
         }
         accounts = append(accounts, account)
     }
+
     resp.SendSuccess(Response{"accounts": accounts})
+}
+
+func (api *BillingAPI) transfer(w http.ResponseWriter, req *http.Request) {
+    resp := NewJSONResponse(w)
+
+    data := make(map[string]string)
+    err := json.NewDecoder(req.Body).Decode(&data)
+    if err != nil {
+        resp.SendRequestError("invalid request body")
+        return
+    }
+
+    err := CheckParameters()
 }
 
 func notFound(w http.ResponseWriter, req *http.Request) {

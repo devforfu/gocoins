@@ -1,4 +1,4 @@
-// Convenience tool to serialize api responses into valid JSON binary data.
+// Convenience tool to serialize the API responses into a valid JSON binary data.
 package server
 
 import (
