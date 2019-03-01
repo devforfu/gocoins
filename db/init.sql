@@ -1,7 +1,3 @@
--- CREATE USER docker;
--- CREATE DATABASE docker;
--- GRANT ALL PRIVILEGES ON DATABASE docker TO docker;
-
 \c docker;
 
 CREATE TYPE currency AS ENUM ('USD', 'EUR');
@@ -20,7 +16,13 @@ CREATE TABLE payment (
   to_id INTEGER NOT NULL,
   amount DECIMAL NOT NULL,
   transaction_time_utc TIMESTAMP NOT NULL,
-  currency currency NOT NULL
+  currency currency NOT NULL,
+  CONSTRAINT payment_from_id_fk FOREIGN KEY (from_id)
+      REFERENCES account (user_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT payment_to_id_fk FOREIGN KEY (to_id)
+      REFERENCES account (user_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION
 );
 
 INSERT INTO account (identifier, currency, amount) VALUES

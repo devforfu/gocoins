@@ -51,16 +51,26 @@ func (db Manager) GetAccounts(identifiers []string) ([]Account, error) {
 }
 
 // Transfer moves amount of cents between fromId and toId accounts.
+//
+// Accounts fromId and toId should be in the same currency. Also, the account fromId
+// should have sufficient amount of funds to perform a transaction. In case if any
+// of these preconditions is violated, or accounts with these IDs are not found,
+// then the error is returned.
+//
+// The process of accounts updating performed as a single transaction. In case if
+// the transaction cannot be rolled back, the method panics.
 func (db Manager) Transfer(fromId, toId string, amount Cents) (*Payment, error) {
     accounts, err := db.GetAccounts([]string{fromId, toId})
-    if err != nil { return nil, err }
+    if err != nil {
+        return nil, inputError("cannot find the accounts")
+    }
 
     fromAcc, toAcc := accounts[0], accounts[1]
     if fromAcc.Currency != toAcc.Currency {
-        return nil, fmt.Errorf("cannot trasnfer money between accounts with different currency")
+        return nil, inputError("cannot transfer money between accounts with different currency")
     }
     if fromAcc.Amount < amount {
-        return nil, fmt.Errorf("cannot make a transaction: insufficient funds")
+        return nil, inputError("cannot make a transaction: insufficient funds")
     }
 
     var mutex sync.Mutex
@@ -75,13 +85,13 @@ func (db Manager) Transfer(fromId, toId string, amount Cents) (*Payment, error) 
     _, err = tx.NamedExec("UPDATE account SET amount = :amount WHERE identifier = :identifier", fromAcc)
     if err != nil {
         mustRollback(tx)
-        return nil, err
+        return nil, internalError(err)
     }
 
     _, err = tx.NamedExec("UPDATE account SET amount = :amount WHERE identifier = :identifier", toAcc)
     if err != nil {
         mustRollback(tx)
-        return nil, err
+        return nil, internalError(err)
     }
 
     payment := Payment{
@@ -97,17 +107,18 @@ func (db Manager) Transfer(fromId, toId string, amount Cents) (*Payment, error) 
 
     if err != nil {
         mustRollback(tx)
-        return nil, err
+        return nil, internalError(err)
     }
 
     if err = tx.Commit(); err != nil {
         mustRollback(tx)
-        return nil, err
+        return nil, internalError(err)
     }
 
     return &payment, nil
 }
 
+// mustRollback panics if a transaction cannot be rolled back.
 func mustRollback(tx *sqlx.Tx) {
     if err := tx.Rollback(); err != nil {
         panic(fmt.Sprintf("transaction failure: %s", err))
@@ -120,6 +131,7 @@ func mustRollback(tx *sqlx.Tx) {
 // For example, if the account sum is equal to $12.34 then it is stored as 1234 cents.
 type Cents int64
 
+// Account represents information about payment system's account.
 type Account struct {
     ID int            `db:"user_id"`
     Identifier string `db:"identifier"`
@@ -128,6 +140,7 @@ type Account struct {
     Created time.Time `db:"created_on"`
 }
 
+// Payment contains an information about a money transfer between accounts.
 type Payment struct {
     ID int          `db:"payment_id"`
     From int        `db:"from_id"`
@@ -150,4 +163,25 @@ func connect(connStr string) (*sqlx.DB, error) {
         return nil, fmt.Errorf("db connection error: %s", err)
     }
     return db, nil
+}
+
+// managerError is returned whenever Manager cannot successfully perform operation
+// due to wrong input or some internal bug.
+// Custom type helps to distinguish between these two types of errors and send
+// error message to the client only in case when the error is not internal one.
+type managerError struct {
+    message string
+    internal bool
+}
+
+func inputError(message string) managerError {
+    return managerError{message, false}
+}
+
+func internalError(err error) managerError {
+    return managerError{err.Error(), true}
+}
+
+func (m managerError) Error() string {
+    return m.message
 }
