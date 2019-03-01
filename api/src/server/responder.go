@@ -3,6 +3,7 @@ package server
 
 import (
     "encoding/json"
+    "fmt"
     "log"
     "net/http"
 )
@@ -15,17 +16,17 @@ type Responder struct {
 }
 
 func (r Responder) SendRequestError(message string) {
-    r.SendError(message, http.StatusBadRequest)
+    r.SendError(fmt.Errorf(message), http.StatusBadRequest)
 }
 
 func (r Responder) SendServerError(message string) {
-    r.SendError(message, http.StatusInternalServerError)
+    r.SendError(fmt.Errorf(message), http.StatusInternalServerError)
 }
 
-func (r Responder) SendError(message string, status int) {
+func (r Responder) SendError(err error, status int) {
     r.WriteHeader(status)
-    err := r.Encode(Response{"error": message, "status": status})
-    if err != nil { log.Print(err) }
+    err = r.Encode(Response{"error": err.Error(), "status": status})
+    if err != nil { log.Printf("encoding error: %s", err) }
 }
 
 func (r Responder) SendSuccess(resp Response) {

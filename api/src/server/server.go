@@ -3,6 +3,7 @@ package server
 import (
     "encoding/json"
     "fmt"
+    "io"
     "log"
     "net/http"
     "strconv"
@@ -43,17 +44,18 @@ func (api *BillingAPI) status(w http.ResponseWriter, req *http.Request) {
 func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
     resp := NewJSONResponse(w)
 
-    cur, err := NewCursor(api.DatabaseConn)
+    m, err := NewManager(api.DatabaseConn)
     if err != nil {
-        log.Print(err)
+        log.Println(err)
         resp.SendServerError("internal error")
         return
+    } else {
+        defer closeWithLog(m)
     }
-    defer cur.Close()
 
-    accounts, err := cur.GetAvailableAccounts()
+    accounts, err := m.GetAvailableAccounts()
     if err != nil {
-        log.Print(err)
+        log.Println(err)
         resp.SendServerError("internal error")
         return
     }
@@ -64,8 +66,17 @@ func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
 func (api *BillingAPI) transfer(w http.ResponseWriter, req *http.Request) {
     resp := NewJSONResponse(w)
 
+    m, err := NewManager(api.DatabaseConn)
+    if err != nil {
+        log.Println(err)
+        resp.SendServerError("internal error")
+        return
+    } else {
+        defer closeWithLog(m)
+    }
+
     data := make(map[string]string)
-    err := json.NewDecoder(req.Body).Decode(&data)
+    err = json.NewDecoder(req.Body).Decode(&data)
     if err != nil {
         resp.SendRequestError("invalid request body")
         return
@@ -77,32 +88,29 @@ func (api *BillingAPI) transfer(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    cur, err := NewCursor(api.DatabaseConn)
-    if err != nil {
-        log.Print(err)
-        resp.SendServerError("internal error")
-        return
-    }
-    defer cur.Close()
-
-    fromId, toId := data["from"], data["to"]
     amount, err := strconv.Atoi(data["amount"])
     if err != nil {
-        log.Print(err)
-        resp.SendRequestError(fmt.Sprintf("invalid transfer amount: %s", data["amount"]))
+        resp.SendRequestError("invalid amount value")
         return
     }
 
-    currency, err := cur.Transfer(fromId, toId, cents(amount))
+    fromId, toId := data["from"], data["to"]
+    payment, err := m.Transfer(fromId, toId, Cents(amount))
     if err != nil {
-        log.Print(err)
-        resp.SendRequestError(err.Error())
+        resp.SendError(err, http.StatusBadRequest)
         return
     }
 
-    resp.SendSuccess(Response{"from": fromId, "to": toId, "currency": currency, "amount": cents(amount).String()})
+    resp.SendSuccess(Response{"payment": payment})
 }
 
 func notFound(w http.ResponseWriter, req *http.Request) {
     NewJSONResponse(w).SendRequestError("not found")
+}
+
+func closeWithLog(c io.Closer) {
+    err := c.Close()
+    if err != nil {
+        log.Printf("warning: error on closing object %v: %s", c, err)
+    }
 }
