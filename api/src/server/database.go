@@ -9,43 +9,53 @@ import (
     "github.com/jmoiron/sqlx"
     "github.com/lib/pq"
     _ "github.com/lib/pq"
+    "io"
     "sync"
     "time"
 )
+
+type Manager interface {
+    io.Closer
+    GetAvailableAccounts() ([]Account, error)
+    GetAccounts(identifiers []string) ([]Account, error)
+    Transfer(fromId, toId string, amount Cents) (*Payment, error)
+    GetPayments(accountId string) ([]Payment, error)
+}
 
 // A Manager is responsible for interaction with the persistent storage.
 //
 // The type implements application-specific data management logic. All interactions
 // with the database are delegated to Manager.
-type Manager struct {
-    *sqlx.DB
+type BillingManager struct {
+    DB *sqlx.DB
 }
 
-func NewManager(connStr string) (*Manager, error) {
+func NewBillingManager(connStr string) (Manager, error) {
     conn, err := connect(connStr)
     if err != nil {
         return nil, err
     } else {
-        return &Manager{conn}, nil
+        var manager Manager = BillingManager{conn}
+        return manager, nil
     }
 }
 
-func (db Manager) Close() error {
-    return db.DB.Close()
+func (m BillingManager) Close() error {
+    return m.DB.Close()
 }
 
 // GetAvailableAccounts returns an array of all available accounts.
-func (db Manager) GetAvailableAccounts() ([]Account, error) {
+func (m BillingManager) GetAvailableAccounts() ([]Account, error) {
     var accounts []Account
-    err := db.Select(&accounts, "SELECT * FROM account")
+    err := m.DB.Select(&accounts, "SELECT * FROM account")
     if err != nil { return nil, err }
     return accounts, nil
 }
 
 // GetAccounts returns a subset of accounts using identifiers array to make a selection.
-func (db Manager) GetAccounts(identifiers []string) ([]Account, error) {
+func (m BillingManager) GetAccounts(identifiers []string) ([]Account, error) {
     var accounts []Account
-    err := db.Select(&accounts, "SELECT * FROM account WHERE identifier = any($1)", pq.Array(identifiers))
+    err := m.DB.Select(&accounts, "SELECT * FROM account WHERE identifier = any($1)", pq.Array(identifiers))
     if err != nil { return nil, err }
     return accounts, nil
 }
@@ -59,8 +69,8 @@ func (db Manager) GetAccounts(identifiers []string) ([]Account, error) {
 //
 // The process of accounts updating performed as a single transaction. In case if
 // the transaction cannot be rolled back, the method panics.
-func (db Manager) Transfer(fromId, toId string, amount Cents) (*Payment, error) {
-    accounts, err := db.GetAccounts([]string{fromId, toId})
+func (m BillingManager) Transfer(fromId, toId string, amount Cents) (*Payment, error) {
+    accounts, err := m.GetAccounts([]string{fromId, toId})
     if err != nil || len(accounts) != 2 {
         return nil, inputError("cannot find the accounts")
     }
@@ -78,7 +88,7 @@ func (db Manager) Transfer(fromId, toId string, amount Cents) (*Payment, error) 
     toAcc.Amount += amount
     mutex.Unlock()
 
-    tx, err := db.Beginx()
+    tx, err := m.DB.Beginx()
     if err != nil { return nil, err }
 
     _, err = tx.NamedExec("UPDATE account SET amount = :amount WHERE identifier = :identifier", fromAcc)
@@ -119,9 +129,9 @@ func (db Manager) Transfer(fromId, toId string, amount Cents) (*Payment, error) 
 
 // GetPayments returns a list of transactions where the account with ID equal to accountId
 // was a sender or a receiver.
-func (db Manager) GetPayments(accountId string) ([]Payment, error) {
+func (m BillingManager) GetPayments(accountId string) ([]Payment, error) {
     var payments []Payment
-    err := db.Select(&payments,"SELECT * FROM payment WHERE from_id = $1 OR to_id = $1", accountId)
+    err := m.DB.Select(&payments,"SELECT * FROM payment WHERE from_id = $1 OR to_id = $1", accountId)
     if err != nil { return nil, err }
     return payments, nil
 }

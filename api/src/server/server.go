@@ -36,6 +36,8 @@ func NewBillingAPI(conf Config) *BillingAPI {
     return &api
 }
 
+var createManager = NewBillingManager
+
 func (api *BillingAPI) status(w http.ResponseWriter, req *http.Request) {
     log.Printf("connected: %s", req.RemoteAddr)
     resp := NewJSONResponse(w)
@@ -45,7 +47,7 @@ func (api *BillingAPI) status(w http.ResponseWriter, req *http.Request) {
 func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
     resp := NewJSONResponse(w)
 
-    m, err := NewManager(api.DatabaseConn)
+    m, err := createManager(api.DatabaseConn)
     if err != nil {
         log.Println(err)
         resp.SendServerError("internal error")
@@ -53,7 +55,6 @@ func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
     } else {
         defer closeWithLog(m)
     }
-
     accounts, err := m.GetAvailableAccounts()
     if err != nil {
         log.Println(err)
@@ -91,7 +92,7 @@ func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
 func (api *BillingAPI) transfer(w http.ResponseWriter, req *http.Request) {
     resp := NewJSONResponse(w)
 
-    m, err := NewManager(api.DatabaseConn)
+    m, err := createManager(api.DatabaseConn)
     if err != nil {
         log.Println(err)
         resp.SendServerError("internal error")
@@ -138,7 +139,7 @@ func (api *BillingAPI) transfer(w http.ResponseWriter, req *http.Request) {
 func (api *BillingAPI) payments(w http.ResponseWriter, req *http.Request) {
     resp := NewJSONResponse(w)
 
-    m, err := NewManager(api.DatabaseConn)
+    m, err := createManager(api.DatabaseConn)
     if err != nil {
         log.Println(err)
         resp.SendServerError("internal error")
