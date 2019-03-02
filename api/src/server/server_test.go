@@ -11,6 +11,31 @@ import (
 )
 
 func TestGettingListOfAccounts(t *testing.T) {
+    makeRequest(t, func() {
+        resp, err := http.Get("http://localhost:8080/accounts")
+        if err != nil {
+            t.Error(err)
+        }
+        defer resp.Body.Close()
+
+        var result Response
+        err = json.NewDecoder(resp.Body).Decode(&result)
+        if err != nil {
+            t.Error(err)
+        }
+        if value, ok := result["accounts"]; !ok {
+            t.Error("no account key found")
+        } else {
+            responseItems := value.([]interface{})
+            if len(responseItems) != len(items) {
+                t.Errorf("invalid number of results")
+            }
+        }
+    })
+}
+
+
+func makeRequest(t *testing.T, testCase func()) {
     api := NewBillingAPI(Config{"",8080,""})
     group := sync.WaitGroup{}
     group.Add(1)
@@ -22,27 +47,7 @@ func TestGettingListOfAccounts(t *testing.T) {
         group.Done()
     }()
 
-    resp, err := http.Get("http://localhost:8080/accounts")
-    if err != nil {
-        t.Error(err)
-    }
-    defer resp.Body.Close()
-
-    var result Response
-    err = json.NewDecoder(resp.Body).Decode(&result)
-    if err != nil {
-        t.Error(err)
-    }
-
-    if value, ok := result["accounts"]; !ok {
-        t.Error("no account key found")
-    } else {
-        responseItems := value.([]interface{})
-        if len(responseItems) != len(items) {
-            t.Errorf("invalid number of results")
-        }
-    }
-
+    testCase()
     _ = api.Shutdown(context.TODO())
     group.Wait()
 }
