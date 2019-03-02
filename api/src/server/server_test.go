@@ -1,13 +1,50 @@
 package server
 
 import (
+    "context"
+    "encoding/json"
     "fmt"
+    "net/http"
+    "sync"
     "testing"
     "time"
 )
 
 func TestGettingListOfAccounts(t *testing.T) {
+    api := NewBillingAPI(Config{"",8080,""})
+    group := sync.WaitGroup{}
+    group.Add(1)
 
+    go func() {
+        if err := api.ListenAndServe(); err != http.ErrServerClosed {
+            t.Errorf("server error: %s", err)
+        }
+        group.Done()
+    }()
+
+    resp, err := http.Get("http://localhost:8080/accounts")
+    if err != nil {
+        t.Error(err)
+    }
+    defer resp.Body.Close()
+
+    var result Response
+    err = json.NewDecoder(resp.Body).Decode(&result)
+    if err != nil {
+        t.Error(err)
+    }
+
+    if value, ok := result["accounts"]; !ok {
+        t.Error("no account key found")
+    } else {
+        responseItems := value.([]interface{})
+        if len(responseItems) != len(items) {
+            t.Errorf("invalid number of results")
+        }
+    }
+
+    _ = api.Shutdown(context.TODO())
+    group.Wait()
 }
 
 
