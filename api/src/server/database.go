@@ -61,10 +61,9 @@ func (db Manager) GetAccounts(identifiers []string) ([]Account, error) {
 // the transaction cannot be rolled back, the method panics.
 func (db Manager) Transfer(fromId, toId string, amount Cents) (*Payment, error) {
     accounts, err := db.GetAccounts([]string{fromId, toId})
-    if err != nil {
+    if err != nil || len(accounts) != 2 {
         return nil, inputError("cannot find the accounts")
     }
-
     fromAcc, toAcc := accounts[0], accounts[1]
     if fromAcc.Currency != toAcc.Currency {
         return nil, inputError("cannot transfer money between accounts with different currency")
@@ -95,8 +94,8 @@ func (db Manager) Transfer(fromId, toId string, amount Cents) (*Payment, error) 
     }
 
     payment := Payment{
-        From:fromAcc.ID,
-        To:toAcc.ID,
+        From:fromAcc.Identifier,
+        To:toAcc.Identifier,
         Time:time.Now().UTC(),
         Amount:amount, Currency:fromAcc.Currency}
 
@@ -116,6 +115,15 @@ func (db Manager) Transfer(fromId, toId string, amount Cents) (*Payment, error) 
     }
 
     return &payment, nil
+}
+
+// GetPayments returns a list of transactions where the account with ID equal to accountId
+// was a sender or a receiver.
+func (db Manager) GetPayments(accountId string) ([]Payment, error) {
+    var payments []Payment
+    err := db.Select(&payments,"SELECT * FROM payment WHERE from_id = $1 OR to_id = $1", accountId)
+    if err != nil { return nil, err }
+    return payments, nil
 }
 
 // mustRollback panics if a transaction cannot be rolled back.
@@ -143,8 +151,8 @@ type Account struct {
 // Payment contains an information about a money transfer between accounts.
 type Payment struct {
     ID int          `db:"payment_id"`
-    From int        `db:"from_id"`
-    To int          `db:"to_id"`
+    From string     `db:"from_id"`
+    To string       `db:"to_id"`
     Time time.Time  `db:"transaction_time_utc"`
     Amount Cents    `db:"amount"`
     Currency string `db:"currency"`
@@ -153,6 +161,10 @@ type Payment struct {
 func (c Cents) String() string {
     whole, decimal := c / 100, c % 100
     return fmt.Sprintf("%s.%s", whole, decimal)
+}
+
+func (c Cents) AsFloat() float32 {
+    return float32(c) / 100
 }
 
 // connect makes a connection to the PostgreSQL database.

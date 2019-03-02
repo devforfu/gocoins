@@ -4,7 +4,7 @@ CREATE TYPE currency AS ENUM ('USD', 'EUR');
 
 CREATE TABLE account (
   user_id serial PRIMARY KEY,
-  identifier VARCHAR(36) NOT NULL,
+  identifier VARCHAR(36) UNIQUE NOT NULL,
   currency currency NOT NULL,
   amount DECIMAL DEFAULT 0,
   created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -12,16 +12,16 @@ CREATE TABLE account (
 
 CREATE TABLE payment (
   payment_id serial PRIMARY KEY,
-  from_id INTEGER NOT NULL,
-  to_id INTEGER NOT NULL,
+  from_id VARCHAR(36) UNIQUE NOT NULL,
+  to_id VARCHAR(36) UNIQUE NOT NULL,
   amount DECIMAL NOT NULL,
   transaction_time_utc TIMESTAMP NOT NULL,
   currency currency NOT NULL,
   CONSTRAINT payment_from_id_fk FOREIGN KEY (from_id)
-      REFERENCES account (user_id) MATCH SIMPLE
+      REFERENCES account (identifier) MATCH SIMPLE
       ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT payment_to_id_fk FOREIGN KEY (to_id)
-      REFERENCES account (user_id) MATCH SIMPLE
+      REFERENCES account (identifier) MATCH SIMPLE
       ON UPDATE NO ACTION ON DELETE NO ACTION
 );
 

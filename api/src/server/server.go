@@ -32,6 +32,7 @@ func NewBillingAPI(conf Config) *BillingAPI {
     mux.Handle("/status", http.HandlerFunc(api.status))
     mux.Handle("/accounts", http.HandlerFunc(api.accounts))
     mux.Handle("/transfer", http.HandlerFunc(api.transfer))
+    mux.Handle("/payments", http.HandlerFunc(api.payments))
     return &api
 }
 
@@ -63,10 +64,12 @@ func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
     type info struct {
         Name string     `json:"name"`
         Currency string `json:"currency"`
+        Amount string   `json:"amount"`
     }
     result := make([]info, 0)
     for _, acc := range accounts {
-        result = append(result, info{acc.Identifier, acc.Currency})
+        amount := fmt.Sprintf("%.2f", acc.Amount.AsFloat())
+        result = append(result, info{acc.Identifier, acc.Currency, amount})
     }
     resp.SendSuccess(Response{"accounts": result})
 }
@@ -104,7 +107,7 @@ func (api *BillingAPI) transfer(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    err = CheckParameters(data, "from", "to", "amount")
+    err = CheckParameters(data, "fromId", "toId", "amount")
     if err != nil {
         resp.SendRequestError(fmt.Sprintf("invalid request: %s", err))
         return
@@ -116,33 +119,102 @@ func (api *BillingAPI) transfer(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    fromId, toId := data["from"], data["to"]
+    fromId, toId := data["fromId"], data["toId"]
     payment, err := m.Transfer(fromId, toId, Cents(amount))
     if err != nil {
-        // do not disclose internal error to the client
-        if err, ok := err.(managerError); ok {
-            if err.internal {
-                log.Printf("error: %s", err.message)
-                resp.SendServerError("internal error")
-            } else {
-                resp.SendRequestError(err.Error())
-            }
-        } else {
-            resp.SendError(err, http.StatusBadRequest)
-        }
+        writeManagerError(err, &resp);
         return
     }
 
     resp.SendSuccess(Response{"payment": payment})
 }
 
+// payments endpoint reports transactions performed with a specific account.
+//
+// The endpoint expects the following parameters:
+//     * accountId: an account which transactions to report.
+//
+// The error is returned in case if the account doesn't exist.
+func (api *BillingAPI) payments(w http.ResponseWriter, req *http.Request) {
+    resp := NewJSONResponse(w)
+
+    m, err := NewManager(api.DatabaseConn)
+    if err != nil {
+        log.Println(err)
+        resp.SendServerError("internal error")
+        return
+    } else {
+        defer closeWithLog(m)
+    }
+
+    data, err := decodeBody(req)
+    if err != nil {
+        resp.SendRequestError(fmt.Sprintf("invalid request: %s", err))
+        return
+    }
+
+    accountId, ok := data["accountId"]
+    if !ok {
+        resp.SendRequestError("invalid request: accountId is missing")
+        return
+    }
+
+    payments, err := m.GetPayments(accountId)
+    if err != nil {
+        writeManagerError(err, &resp)
+        return
+    }
+
+    var send, recv []map[string]interface{}
+
+    for _, p := range payments {
+        item := make(map[string]interface{}, 0)
+        item["amount"] = p.Amount.AsFloat()
+        item["time"] = p.Time
+        if p.From == accountId {
+            item["account"] = p.To
+            send = append(send, item)
+        } else {
+            item["account"] = p.From
+            recv = append(recv, item)
+        }
+    }
+
+    transactions := map[string]interface{}{"sent": send, "received": recv}
+    resp.SendSuccess(Response{"account": accountId, "payments": transactions})
+}
+
 func notFound(w http.ResponseWriter, req *http.Request) {
     NewJSONResponse(w).SendRequestError("not found")
+}
+
+func decodeBody(req *http.Request) (map[string]string, error) {
+    data := make(map[string]string)
+    err := json.NewDecoder(req.Body).Decode(&data)
+    if err != nil { return nil, err }
+    _ = req.Body.Close()
+    return data, nil
 }
 
 func closeWithLog(c io.Closer) {
     err := c.Close()
     if err != nil {
         log.Printf("warning: error on closing object %v: %s", c, err)
+    }
+}
+
+// writeManagerError sends error response to the client. In case if the error
+// comes from the invalid input, it is reported to the client. Otherwise, only
+// a generic message about internal error is sent.
+func writeManagerError(err error, resp *Responder) {
+    if err, ok := err.(managerError); ok {
+        if err.internal {
+            log.Printf("error: %s", err.message)
+            resp.SendServerError("internal error")
+        } else {
+            resp.SendRequestError(err.Error())
+        }
+    } else {
+        resp.SendError(err, http.StatusBadRequest)
     }
 }
