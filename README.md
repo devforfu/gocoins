@@ -111,3 +111,15 @@ $ http http://localhost:8080/payments accountId=first | jq .
   }
 }
 ```
+
+## Tests
+
+The endpoint tests are stored in the file `api/src/server/server_test.go`. The tests use mockery to replace
+PostgreSQL database queries with in-memory dataset. The tests don't provide the full coverage of the codebase 
+but verify that endpoints work as expected with valid and invalid parameters.
+
+To run tests, use the code: 
+```
+$ cd api 
+$ go test -v ./src/server 
+``` 
