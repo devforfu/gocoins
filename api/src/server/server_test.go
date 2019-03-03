@@ -193,6 +193,10 @@ var payments = []Payment{
     {1, "A", "B", time.Now().Add(-1*time.Hour), 1000, "USD"},
     {2, "B", "A", time.Now().Add(-2*time.Hour), 1000, "USD"}}
 
+
+// A MockManager type replaces real database management with mock implementation.
+// The MockManager uses two in-memory arrays, Accounts and Payments, with the predefined data.
+// It doesn't store the performed changes and expected to be stateless.
 type MockManager struct {
     Accounts map[string]Account
     Payments []Payment

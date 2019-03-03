@@ -19,6 +19,7 @@ func main() {
     _ = srv.Shutdown(context.TODO())
 }
 
+// connString builds a connection string using the environment variables.
 func connString() string {
     var (
         host = os.Getenv("DB_HOST")

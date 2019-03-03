@@ -1,3 +1,6 @@
+// Payment API definition.
+//
+// Check the README.md file to get some additional information and the API and examples of usage.
 package server
 
 import (
@@ -20,6 +23,7 @@ type Config struct {
 func (c Config) Addr() string { return fmt.Sprintf("%s:%d", c.Host, c.Port) }
 func (c Config) URL()  string { return fmt.Sprintf("http://%s", c.Addr()) }
 
+// BillingAPI represents an HTTP-server serving the billing API.
 type BillingAPI struct {
     Config
     *http.Server
@@ -36,14 +40,20 @@ func NewBillingAPI(conf Config) *BillingAPI {
     return &api
 }
 
+// createManager is a factory function that creates database management instance.
+// This function should be used in every API endpoint instead of direct BillingManager
+// initialization to make the endpoint testable.
 var createManager = NewBillingManager
 
+// status is a testing endpoint that helps to check if the API is up
 func (api *BillingAPI) status(w http.ResponseWriter, req *http.Request) {
     log.Printf("connected: %s", req.RemoteAddr)
     resp := NewJSONResponse(w)
     resp.SendSuccess(Response{"success": true})
 }
 
+// accounts endpoint returns list of available accounts.
+// The endpoint doesn't expect any parameters and pulls every item stored in the database.
 func (api *BillingAPI) accounts(w http.ResponseWriter, req *http.Request) {
     resp := NewJSONResponse(w)
 
@@ -185,10 +195,12 @@ func (api *BillingAPI) payments(w http.ResponseWriter, req *http.Request) {
     resp.SendSuccess(Response{"account": accountId, "payments": transactions})
 }
 
+// notFound implements a custom 404 response.
 func notFound(w http.ResponseWriter, req *http.Request) {
-    NewJSONResponse(w).SendRequestError("not found")
+    NewJSONResponse(w).SendError(fmt.Errorf("not found"), http.StatusNotFound)
 }
 
+// decodeBody decodes request body into JSON.
 func decodeBody(req *http.Request) (map[string]string, error) {
     data := make(map[string]string)
     err := json.NewDecoder(req.Body).Decode(&data)
@@ -197,6 +209,7 @@ func decodeBody(req *http.Request) (map[string]string, error) {
     return data, nil
 }
 
+// closeWithLog closes a closer and logs the error if the closing fails.
 func closeWithLog(c io.Closer) {
     err := c.Close()
     if err != nil {
