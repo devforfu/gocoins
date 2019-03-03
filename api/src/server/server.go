@@ -115,7 +115,7 @@ func (api *BillingAPI) transfer(w http.ResponseWriter, req *http.Request) {
     }
 
     amount, err := strconv.Atoi(data["amount"])
-    if err != nil {
+    if err != nil || amount <= 0 {
         resp.SendRequestError("invalid amount value")
         return
     }

@@ -130,9 +130,18 @@ func (m BillingManager) Transfer(fromId, toId string, amount Cents) (*Payment, e
 // GetPayments returns a list of transactions where the account with ID equal to accountId
 // was a sender or a receiver.
 func (m BillingManager) GetPayments(accountId string) ([]Payment, error) {
+    accounts, err := m.GetAccounts([]string{accountId})
+    if err != nil {
+        return nil, internalError(err)
+    }
+    if len(accounts) == 0 {
+        return nil, inputError("account is not found")
+    }
     var payments []Payment
-    err := m.DB.Select(&payments,"SELECT * FROM payment WHERE from_id = $1 OR to_id = $1", accountId)
-    if err != nil { return nil, err }
+    err = m.DB.Select(&payments,"SELECT * FROM payment WHERE from_id = $1 OR to_id = $1", accountId)
+    if err != nil {
+        return nil, internalError(err)
+    }
     return payments, nil
 }
 
@@ -160,12 +169,12 @@ type Account struct {
 
 // Payment contains an information about a money transfer between accounts.
 type Payment struct {
-    ID int          `db:"payment_id"`
-    From string     `db:"from_id"`
-    To string       `db:"to_id"`
-    Time time.Time  `db:"transaction_time_utc"`
-    Amount Cents    `db:"amount"`
-    Currency string `db:"currency"`
+    ID int          `db:"payment_id" json:"id"`
+    From string     `db:"from_id" json:"from"`
+    To string       `db:"to_id" json:"to"`
+    Time time.Time  `db:"transaction_time_utc" json:"time_utc"`
+    Amount Cents    `db:"amount" json:"amount"`
+    Currency string `db:"currency" json:"currency"`
 }
 
 func (c Cents) String() string {

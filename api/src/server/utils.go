@@ -12,3 +12,4 @@ func CheckParameters(dict map[string]string, keys ...string) error {
     }
     return nil
 }
+
